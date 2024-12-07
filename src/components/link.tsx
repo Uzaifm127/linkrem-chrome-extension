@@ -1,17 +1,28 @@
 import { Trash2 } from "lucide-react";
+import { LinkProps } from "@/types/props";
 
-const Link = () => {
+const Link: React.FC<LinkProps> = ({ name, tags, url }) => {
   return (
     <div
       className="bg-white rounded-md p-3 flex justify-between cursor-pointer"
-      onClick={() =>
-        window.open("https://youtube.com/xyz", `_linkrem-${Date.now()}`)
-      }
+      onClick={() => window.open(url, `_linkrem-${Date.now()}`)}
     >
       <div className="space-y-1">
-        <h4 className="text-lg font-semibold">Link</h4>
-        <p className="text-muted-foreground font-medium">
-          https://youtube.com/xyz
+        <div className="flex gap-6">
+          <h4 className="text-lg font-semibold whitespace-nowrap text-ellipsis">
+            {name}
+          </h4>
+
+          <div className="flex flex-nowrap overflow-hidden">
+            {tags.map((tag) => (
+              <div key={tag.id} className="bg-primary rounded-sm text-white">
+                {tag.tagName}
+              </div>
+            ))}
+          </div>
+        </div>
+        <p className="text-muted-foreground font-medium whitespace-nowrap text-ellipsis">
+          {url}
         </p>
       </div>
       <Trash2

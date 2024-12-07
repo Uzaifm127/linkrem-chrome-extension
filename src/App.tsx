@@ -13,9 +13,40 @@ import {
 } from "@/components/ui/popover";
 import Link from "@/components/link";
 import { Input } from "@/components/ui/input";
+import { useQuery } from "@tanstack/react-query";
+import { linkQueryKey } from "@/constants/query-keys";
+import { fetcher } from "@/lib/fetcher";
+import LinkLoader from "@/components/link-loader";
+
+interface Link {
+  id: string;
+  name: string;
+  url: string;
+  tags: {
+    id: string;
+    createdAt: Date;
+    updatedAt: Date;
+    tagName: string;
+  }[];
+  createdAt: Date;
+  updatedAt: Date;
+  sessionLinksId: string | null;
+}
 
 const App = () => {
   const delayDuration = 200;
+
+  // Querying for links
+  const linkQuery = useQuery({
+    queryKey: [linkQueryKey],
+    queryFn: async () =>
+      await fetcher("https://lamb-evolved-panda.ngrok-free.app/api/link/all"),
+    // enabled: tabValue === "links",
+  });
+  const data: Array<Link> = linkQuery.data?.links || [];
+
+  console.log(`data: `, data);
+  console.log(`linkQuery data: `, linkQuery.data);
 
   return (
     <main>
@@ -54,7 +85,7 @@ const App = () => {
                   <p>Shortcuts</p>
                 </TooltipContent>
 
-                <PopoverContent align="start">
+                <PopoverContent>
                   <div className="flex justify-center flex-col gap-1">
                     <div className="bg-primary/5 text-primary p-2 rounded-md">
                       Press <span>Shift + L</span> to save link
@@ -111,7 +142,7 @@ const App = () => {
                   <p>Filter</p>
                 </TooltipContent>
 
-                <PopoverContent align="end">
+                <PopoverContent>
                   Place content for the popover here.
                 </PopoverContent>
               </Popover>
@@ -136,29 +167,18 @@ const App = () => {
       </TooltipProvider>
 
       <div className="flex flex-col gap-4 p-4 overflow-y-scroll h-[25.6875rem] [scrollbar-width:none]">
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
-        <Link />
+        {linkQuery.isLoading
+          ? Array.from({ length: 10 }).map((_, index) => (
+              <LinkLoader key={index + 1} />
+            ))
+          : data.map((link) => (
+              <Link
+                key={link.id}
+                name={link.name}
+                tags={link.tags}
+                url={link.url}
+              />
+            ))}
       </div>
     </main>
   );
