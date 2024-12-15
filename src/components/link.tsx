@@ -2,6 +2,8 @@ import { Trash2 } from "lucide-react";
 import { LinkProps } from "@/types/props";
 
 const Link: React.FC<LinkProps> = ({ name, tags, url }) => {
+  console.log(tags);
+
   return (
     <div
       className="bg-white rounded-md p-3 flex justify-between cursor-pointer"
@@ -13,12 +15,15 @@ const Link: React.FC<LinkProps> = ({ name, tags, url }) => {
             {name}
           </h4>
 
-          <div className="flex flex-nowrap overflow-hidden">
-            {tags.map((tag) => (
+          <div className="flex flex-nowrap overflow-hidden items-center">
+            {/* {tags.map((tag) => (
               <div key={tag.id} className="bg-primary rounded-sm text-white">
                 {tag.tagName}
               </div>
-            ))}
+            ))} */}
+            {/* <div className="bg-primary px-4 py-1 rounded-md text-white">
+              Tag
+            </div> */}
           </div>
         </div>
         <p className="text-muted-foreground font-medium whitespace-nowrap text-ellipsis">
@@ -28,7 +33,7 @@ const Link: React.FC<LinkProps> = ({ name, tags, url }) => {
       <Trash2
         className="h-7 w-7 rounded-sm transition text-red-600 cursor-pointer hover:bg-red-200 p-1"
         onClick={(e) => {
-          e.preventDefault();
+          e.stopPropagation();
           //   if (!!dontShowDeletePopup) {
           //     deleteMutation.mutate(name);
           //   } else {

@@ -1,3 +1,5 @@
+/* global chrome */
+
 import { Button } from "@/components/ui/button";
 import { Command, Filter, Plus, Search, Star } from "lucide-react";
 import {
@@ -40,13 +42,19 @@ const App = () => {
   const linkQuery = useQuery({
     queryKey: [linkQueryKey],
     queryFn: async () =>
-      await fetcher("https://lamb-evolved-panda.ngrok-free.app/api/link/all"),
+      await fetcher("https://linkrem-three.vercel.app/api/link/all"),
     // enabled: tabValue === "links",
   });
   const data: Array<Link> = linkQuery.data?.links || [];
 
-  console.log(`data: `, data);
-  console.log(`linkQuery data: `, linkQuery.data);
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const activeTab = tabs[0];
+    const tabUrl = activeTab.url;
+    const tabTitle = activeTab.title;
+
+    console.log("Current Page URL:", tabUrl);
+    console.log("Current Page Title:", tabTitle);
+  });
 
   return (
     <main>
