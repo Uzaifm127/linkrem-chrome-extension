@@ -19,6 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import { linkQueryKey } from "@/constants/query-keys";
 import { fetcher } from "@/lib/fetcher";
 import LinkLoader from "@/components/link-loader";
+import { useCallback, useEffect, useState } from "react";
 
 interface Link {
   id: string;
@@ -38,6 +39,12 @@ interface Link {
 const App = () => {
   const delayDuration = 200;
 
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [singleURL, setSingleURL] = useState({
+    title: "",
+    URL: "",
+  });
+
   // Querying for links
   const linkQuery = useQuery({
     queryKey: [linkQueryKey],
@@ -47,14 +54,29 @@ const App = () => {
   });
   const data: Array<Link> = linkQuery.data?.links || [];
 
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    const activeTab = tabs[0];
-    const tabUrl = activeTab.url;
-    const tabTitle = activeTab.title;
+  useEffect(() => {
+    chrome.tabs.query({ active: true }, (tabs) => {
+      const activeTab = tabs[0];
+      const URL = activeTab.url || "";
+      const title = activeTab.title || "";
 
-    console.log("Current Page URL:", tabUrl);
-    console.log("Current Page Title:", tabTitle);
-  });
+      setSingleURL({ title, URL });
+    });
+  }, []);
+
+  const onInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const { value, name } = e.currentTarget;
+
+      setSingleURL((prev) => ({ ...prev, [name]: value }));
+    },
+    []
+  );
+
+  const onLinkSave = useCallback(() => {
+    // Closing the popover
+    setPopoverOpen(false);
+  }, []);
 
   return (
     <main>
@@ -62,18 +84,68 @@ const App = () => {
         <div className="p-4 border-b space-y-2">
           <div className="flex justify-between">
             <Tooltip delayDuration={delayDuration}>
-              <TooltipTrigger asChild>
-                <Button
-                  size="icon"
-                  type="button"
-                  className="bg-white hover:bg-slate-100"
-                >
-                  <Plus className="text-text" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent align="start">
-                <p>Add link</p>
-              </TooltipContent>
+              <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                <TooltipTrigger asChild>
+                  <PopoverTrigger asChild>
+                    <Button
+                      size="icon"
+                      type="button"
+                      className="bg-white hover:bg-slate-100"
+                    >
+                      <Plus className="text-text" />
+                    </Button>
+                  </PopoverTrigger>
+                </TooltipTrigger>
+                <TooltipContent align="start">
+                  <p>Add link</p>
+                </TooltipContent>
+
+                <PopoverContent align="start">
+                  <div className="flex justify-center flex-col gap-4">
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor="page-title"
+                        className="text-sm font-semibold"
+                      >
+                        Title
+                      </label>
+                      <Input
+                        name="title"
+                        id="page-title"
+                        value={singleURL.title}
+                        onChange={onInputChange}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor="page-url"
+                        className="text-sm font-semibold"
+                      >
+                        URL
+                      </label>
+                      <Input
+                        name="URL"
+                        id="page-url"
+                        value={singleURL.URL}
+                        disabled
+                      />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <Button
+                        onClick={() => setPopoverOpen(false)}
+                        variant={"outline"}
+                        className="hover:bg-accent-foreground/20 hover:text-text text-sm"
+                      >
+                        Cancel
+                      </Button>
+                      <Button onClick={onLinkSave} className="text-sm">
+                        Save
+                      </Button>
+                    </div>
+                  </div>{" "}
+                </PopoverContent>
+              </Popover>
             </Tooltip>
 
             <Tooltip delayDuration={delayDuration}>
@@ -180,12 +252,7 @@ const App = () => {
               <LinkLoader key={index + 1} />
             ))
           : data.map((link) => (
-              <Link
-                key={link.id}
-                name={link.name}
-                tags={link.tags}
-                url={link.url}
-              />
+              <Link key={link.id} name={link.name} url={link.url} />
             ))}
       </div>
     </main>
