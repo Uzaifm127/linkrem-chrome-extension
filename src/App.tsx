@@ -1,7 +1,7 @@
 /* global chrome */
 
 import { Button } from "@/components/ui/button";
-import { Command, Filter, Plus, Search, Star } from "lucide-react";
+import { Check, Command, Filter, Plus, Search, Star } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -15,11 +15,14 @@ import {
 } from "@/components/ui/popover";
 import Link from "@/components/link";
 import { Input } from "@/components/ui/input";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { linkQueryKey } from "@/constants/query-keys";
 import { fetcher } from "@/lib/fetcher";
 import LinkLoader from "@/components/link-loader";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { v4 as uuid } from "uuid";
+import { cn } from "@/lib/utils";
+import { normalizeUrl } from "@/lib/functions";
 
 interface Link {
   id: string;
@@ -40,10 +43,16 @@ const App = () => {
   const delayDuration = 200;
 
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const [URLExistState, setURLExistState] = useState({
+    boolean: false,
+    value: "",
+  });
   const [singleURL, setSingleURL] = useState({
     title: "",
     URL: "",
   });
+
+  const queryClient = useQueryClient();
 
   // Querying for links
   const linkQuery = useQuery({
@@ -52,7 +61,101 @@ const App = () => {
       await fetcher("https://linkrem-three.vercel.app/api/link/all"),
     // enabled: tabValue === "links",
   });
-  const data: Array<Link> = linkQuery.data?.links || [];
+
+  // Only initialize or change data variable when array of links changes
+  const data: Array<Link> = useMemo(
+    () => linkQuery.data?.links || [],
+    [linkQuery.data?.links]
+  );
+
+  const linkMutate = useMutation({
+    mutationFn: async (linkData: { name: string; url: string; tags: string }) =>
+      await fetcher(
+        "https://linkrem-three.vercel.app/api/link",
+        "POST",
+        linkData
+      ),
+
+    async onMutate(newLink) {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: [linkQueryKey] });
+
+      // Getting the previous links
+      const previousLinks = queryClient.getQueryData([linkQueryKey]);
+
+      // Optimistically updating the query data
+      queryClient.setQueryData(
+        [linkQueryKey],
+        (oldLinks: { links: Array<Link> } | undefined) => {
+          if (oldLinks) {
+            return {
+              links: [
+                ...oldLinks.links,
+                {
+                  id: uuid(),
+                  name: newLink.name,
+                  url: newLink.url,
+                  tags: [],
+                  sessionLinksId: null,
+                  createdAt: new Date(new Date().toISOString()),
+                  updatedAt: new Date(new Date().toISOString()),
+                },
+              ],
+            };
+          }
+        }
+      );
+
+      // Return the context with previous value
+      return { previousLinks };
+    },
+
+    onError(_error, _newLink, context) {
+      if (context) {
+        queryClient.setQueryData([linkQueryKey], context.previousLinks);
+      }
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (currentLinkName: string) =>
+      await fetcher("https://linkrem-three.vercel.app/api/link", "DELETE", {
+        currentLinkName,
+      } as {
+        currentLinkName: string;
+      }),
+
+    async onMutate(currentLinkName) {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: [linkQueryKey] });
+
+      // Getting the previous links
+      const previousLinks = queryClient.getQueryData([linkQueryKey]);
+
+      // Optimistically updating the query data
+      queryClient.setQueryData(
+        [linkQueryKey],
+        (oldLinks: { links: Array<Link> } | undefined) => {
+          if (oldLinks) {
+            const updatedLinks = oldLinks.links.filter(
+              (link) => link.name !== currentLinkName
+            );
+
+            return { links: updatedLinks };
+          }
+        }
+      );
+
+      // Return the context with previous value
+      return { previousLinks };
+    },
+
+    onError(_error, _newLink, context) {
+      if (context) {
+        queryClient.setQueryData([linkQueryKey], context.previousLinks);
+      }
+    },
+  });
 
   useEffect(() => {
     chrome.tabs.query({ active: true }, (tabs) => {
@@ -64,6 +167,15 @@ const App = () => {
     });
   }, []);
 
+  // For storing the condition of, Is link already exist
+  useEffect(() => {
+    const element = data?.find(
+      (link) => normalizeUrl(link.url) === normalizeUrl(singleURL.URL)
+    );
+
+    setURLExistState({ boolean: !!element, value: element?.name || "" });
+  }, [data, singleURL.URL, singleURL.title]);
+
   const onInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const { value, name } = e.currentTarget;
@@ -74,9 +186,12 @@ const App = () => {
   );
 
   const onLinkSave = useCallback(() => {
+    const linkData = { name: singleURL.title, url: singleURL.URL, tags: "" };
+
+    linkMutate.mutate(linkData);
     // Closing the popover
     setPopoverOpen(false);
-  }, []);
+  }, [singleURL.title, singleURL.URL, linkMutate]);
 
   return (
     <main>
@@ -86,18 +201,33 @@ const App = () => {
             <Tooltip delayDuration={delayDuration}>
               <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
                 <TooltipTrigger asChild>
-                  <PopoverTrigger asChild>
-                    <Button
-                      size="icon"
-                      type="button"
-                      className="bg-white hover:bg-slate-100"
-                    >
+                  <Button
+                    size="icon"
+                    type="button"
+                    className={cn(
+                      URLExistState.boolean
+                        ? "bg-primary text-white hover:bg-primary/80"
+                        : "bg-white hover:bg-slate-100"
+                    )}
+                    onClick={() => {
+                      console.log("hello world");
+
+                      if (URLExistState.boolean) {
+                        deleteMutation.mutate(URLExistState.value);
+                      } else {
+                        setPopoverOpen(true);
+                      }
+                    }}
+                  >
+                    {URLExistState.boolean ? (
+                      <Check className="text-white" />
+                    ) : (
                       <Plus className="text-text" />
-                    </Button>
-                  </PopoverTrigger>
+                    )}
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent align="start">
-                  <p>Add link</p>
+                  <p>{URLExistState.boolean ? "Remove" : "Add"} link</p>
                 </TooltipContent>
 
                 <PopoverContent align="start">

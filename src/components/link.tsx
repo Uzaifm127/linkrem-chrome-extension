@@ -9,11 +9,11 @@ const Link: React.FC<LinkProps> = ({ name, url }) => {
     >
       <div>
         <div className="flex gap-6">
-          <h4 className="text-lg font-semibold whitespace-nowrap text-ellipsis">
+          <h4 className="text-lg font-semibold whitespace-nowrap text-ellipsis w-[19rem]">
             {name}
           </h4>
         </div>
-        <p className="text-muted-foreground font-medium whitespace-nowrap text-ellipsis">
+        <p className="text-muted-foreground font-medium whitespace-nowrap text-ellipsis overflow-hidden w-[19rem]">
           {url}
         </p>
       </div>
