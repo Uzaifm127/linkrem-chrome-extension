@@ -1,7 +1,5 @@
-/* global chrome */
-
 import { Button } from "@/components/ui/button";
-import { Check, Command, Filter, Plus, Search, Star } from "lucide-react";
+import { BookmarkPlus, Check, Command, Plus, Search, Star } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -16,33 +14,23 @@ import {
 import Link from "@/components/link";
 import { Input } from "@/components/ui/input";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { linkQueryKey } from "@/constants/query-keys";
+import { linkQueryKey, sessionQueryKey } from "@/constants/query-keys";
 import { fetcher } from "@/lib/fetcher";
 import LinkLoader from "@/components/link-loader";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { v4 as uuid } from "uuid";
 import { cn } from "@/lib/utils";
 import { normalizeUrl } from "@/lib/functions";
-
-interface Link {
-  id: string;
-  name: string;
-  url: string;
-  tags: {
-    id: string;
-    createdAt: Date;
-    updatedAt: Date;
-    tagName: string;
-  }[];
-  createdAt: Date;
-  updatedAt: Date;
-  sessionLinksId: string | null;
-}
+import { SessionLinkData, Link as LinkType, SessionLink } from "@/types/index";
 
 const App = () => {
   const delayDuration = 200;
 
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [linkPopoverOpen, setLinkPopoverOpen] = useState(false);
+  const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false);
+  const [linkDataState, setLinkDataState] = useState<Array<LinkType>>([]);
+  const [sessionSavingError, setSessionSavingError] = useState("");
+  const [sessionName, setSessionName] = useState("");
   const [URLExistState, setURLExistState] = useState({
     boolean: false,
     value: "",
@@ -62,11 +50,67 @@ const App = () => {
     // enabled: tabValue === "links",
   });
 
-  // Only initialize or change data variable when array of links changes
-  const data: Array<Link> = useMemo(
+  // For setting the state of the link data to the previous
+  const data: Array<LinkType> = useMemo(
     () => linkQuery.data?.links || [],
     [linkQuery.data?.links]
   );
+
+  useEffect(() => {
+    setLinkDataState(linkQuery.data?.links || []);
+  }, [linkQuery.data?.links]);
+
+  const sessionMutate = useMutation({
+    mutationFn: async (sessionLinkData: SessionLinkData) =>
+      await fetcher(
+        "https://linkrem-three.vercel.app/api/session",
+        "POST",
+        sessionLinkData
+      ),
+
+    async onMutate(newSession) {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: [sessionQueryKey] });
+
+      // Getting the previous sessions
+      const previousSessions = queryClient.getQueryData([sessionQueryKey]);
+
+      // Optimistically updating the query data
+      queryClient.setQueryData(
+        [sessionQueryKey],
+        (oldSessions: { sessions: Array<SessionLink> } | undefined) => {
+          const sessionLinksId = uuid();
+
+          if (oldSessions) {
+            const links = newSession.links.map((link) => ({
+              id: uuid(),
+              name: link.name,
+              url: link.url,
+              sessionLinksId,
+              createdAt: new Date(new Date().toISOString()),
+              updatedAt: new Date(new Date().toISOString()),
+            }));
+
+            return {
+              sessions: [
+                ...oldSessions.sessions,
+                {
+                  id: sessionLinksId,
+                  name: newSession.name,
+                  links,
+                  createdAt: new Date(new Date().toISOString()),
+                  updatedAt: new Date(new Date().toISOString()),
+                },
+              ],
+            };
+          }
+        }
+      );
+
+      // Return the context with previous value
+      return { previousSessions };
+    },
+  });
 
   const linkMutate = useMutation({
     mutationFn: async (linkData: { name: string; url: string; tags: string }) =>
@@ -86,7 +130,7 @@ const App = () => {
       // Optimistically updating the query data
       queryClient.setQueryData(
         [linkQueryKey],
-        (oldLinks: { links: Array<Link> } | undefined) => {
+        (oldLinks: { links: Array<LinkType> } | undefined) => {
           if (oldLinks) {
             return {
               links: [
@@ -135,7 +179,7 @@ const App = () => {
       // Optimistically updating the query data
       queryClient.setQueryData(
         [linkQueryKey],
-        (oldLinks: { links: Array<Link> } | undefined) => {
+        (oldLinks: { links: Array<LinkType> } | undefined) => {
           if (oldLinks) {
             const updatedLinks = oldLinks.links.filter(
               (link) => link.name !== currentLinkName
@@ -158,7 +202,7 @@ const App = () => {
   });
 
   useEffect(() => {
-    chrome.tabs.query({ active: true }, (tabs) => {
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
       const activeTab = tabs[0];
       const URL = activeTab.url || "";
       const title = activeTab.title || "";
@@ -169,12 +213,12 @@ const App = () => {
 
   // For storing the condition of, Is link already exist
   useEffect(() => {
-    const element = data?.find(
+    const element = linkDataState?.find(
       (link) => normalizeUrl(link.url) === normalizeUrl(singleURL.URL)
     );
 
     setURLExistState({ boolean: !!element, value: element?.name || "" });
-  }, [data, singleURL.URL, singleURL.title]);
+  }, [linkDataState, singleURL.URL, singleURL.title]);
 
   const onInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,8 +234,26 @@ const App = () => {
 
     linkMutate.mutate(linkData);
     // Closing the popover
-    setPopoverOpen(false);
+    setLinkPopoverOpen(false);
   }, [singleURL.title, singleURL.URL, linkMutate]);
+
+  const onSessionSave = useCallback(async () => {
+    if (!sessionName) {
+      setSessionSavingError("Session name is required");
+      return;
+    }
+
+    const tabs = await chrome.tabs.query({});
+
+    const links = tabs.map((tab) => ({
+      name: tab.title || "",
+      url: tab.url || "",
+    }));
+
+    const filteredLinks = links.filter((link) => link.url && link.name);
+
+    sessionMutate.mutate({ name: sessionName, links: filteredLinks });
+  }, [sessionMutate, sessionName]);
 
   return (
     <main>
@@ -199,32 +261,37 @@ const App = () => {
         <div className="p-4 border-b space-y-2">
           <div className="flex justify-between">
             <Tooltip delayDuration={delayDuration}>
-              <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+              <Popover open={linkPopoverOpen} onOpenChange={setLinkPopoverOpen}>
                 <TooltipTrigger asChild>
-                  <Button
-                    size="icon"
-                    type="button"
-                    className={cn(
-                      URLExistState.boolean
-                        ? "bg-primary text-white hover:bg-primary/80"
-                        : "bg-white hover:bg-slate-100"
-                    )}
-                    onClick={() => {
-                      console.log("hello world");
-
+                  <PopoverTrigger
+                    asChild
+                    onClick={(e) => {
                       if (URLExistState.boolean) {
-                        deleteMutation.mutate(URLExistState.value);
-                      } else {
-                        setPopoverOpen(true);
+                        e.preventDefault();
                       }
                     }}
                   >
-                    {URLExistState.boolean ? (
-                      <Check className="text-white" />
-                    ) : (
-                      <Plus className="text-text" />
-                    )}
-                  </Button>
+                    <Button
+                      size="icon"
+                      type="button"
+                      className={cn(
+                        URLExistState.boolean
+                          ? "bg-primary text-white hover:bg-primary/80"
+                          : "bg-white hover:bg-slate-100"
+                      )}
+                      onClick={() => {
+                        if (URLExistState.boolean) {
+                          deleteMutation.mutate(URLExistState.value);
+                        }
+                      }}
+                    >
+                      {URLExistState.boolean ? (
+                        <Check className="text-white" />
+                      ) : (
+                        <Plus className="text-text" />
+                      )}
+                    </Button>
+                  </PopoverTrigger>
                 </TooltipTrigger>
                 <TooltipContent align="start">
                   <p>{URLExistState.boolean ? "Remove" : "Add"} link</p>
@@ -261,9 +328,9 @@ const App = () => {
                       />
                     </div>
 
-                    <div className="flex gap-3">
+                    <div className="flex justify-end gap-3">
                       <Button
-                        onClick={() => setPopoverOpen(false)}
+                        onClick={() => setLinkPopoverOpen(false)}
                         variant={"outline"}
                         className="hover:bg-accent-foreground/20 hover:text-text text-sm"
                       >
@@ -328,8 +395,28 @@ const App = () => {
                 <PopoverContent>
                   <Input
                     type="search"
-                    placeholder="Search Link Name"
+                    placeholder="Search by link name or URL"
                     className="w-full bg-muted"
+                    onChange={(e) => {
+                      const searchedValue = e.target.value;
+
+                      if (searchedValue.length) {
+                        setLinkDataState((prev) => {
+                          return prev.filter(
+                            (link) =>
+                              link.name
+                                .toLowerCase()
+                                .includes(searchedValue.toLowerCase()) ||
+                              link.url
+                                .toLowerCase()
+                                .includes(searchedValue.toLowerCase())
+                          );
+                        });
+                      } else {
+                        // Resetting the data
+                        setLinkDataState(data);
+                      }
+                    }}
                   />{" "}
                 </PopoverContent>
               </Popover>
@@ -344,12 +431,12 @@ const App = () => {
                       type="button"
                       className="bg-white hover:bg-slate-100"
                     >
-                      <Filter className="text-text" />
+                      <BookmarkPlus className="text-text" />
                     </Button>
                   </PopoverTrigger>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Filter</p>
+                  <p>Extract bookmarks</p>
                 </TooltipContent>
 
                 <PopoverContent>
@@ -359,15 +446,68 @@ const App = () => {
             </Tooltip>
 
             <Tooltip delayDuration={delayDuration}>
-              <TooltipTrigger asChild>
-                <Button
-                  size="icon"
-                  type="button"
-                  className="bg-white hover:bg-slate-100"
+              <Popover
+                open={sessionPopoverOpen}
+                onOpenChange={setSessionPopoverOpen}
+              >
+                <TooltipTrigger asChild>
+                  <PopoverTrigger asChild>
+                    <Button
+                      size="icon"
+                      type="button"
+                      className="bg-white hover:bg-slate-100"
+                    >
+                      <Star className="text-text" />
+                    </Button>
+                  </PopoverTrigger>
+                </TooltipTrigger>
+                <TooltipContent align="end">
+                  <p>Add session</p>
+                </TooltipContent>
+
+                <PopoverContent
+                  align="end"
+                  onCloseAutoFocus={() => setLinkDataState(data)}
                 >
-                  <Star className="text-text" />
-                </Button>
-              </TooltipTrigger>
+                  <div className="flex justify-center flex-col gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <label
+                          htmlFor="session-name"
+                          className="text-sm font-semibold"
+                        >
+                          Session name
+                        </label>
+                        <Input
+                          name="Session name"
+                          id="session-name"
+                          value={sessionName}
+                          onChange={(e) => {
+                            setSessionSavingError("");
+                            setSessionName(e.target.value);
+                          }}
+                        />
+                      </div>
+                      <p className="text-red-500 text-sm mt-2">
+                        {sessionSavingError}
+                      </p>
+                    </div>
+
+                    <div className="flex justify-end gap-3">
+                      <Button
+                        onClick={() => setLinkPopoverOpen(false)}
+                        variant={"outline"}
+                        className="hover:bg-accent-foreground/20 hover:text-text text-sm"
+                      >
+                        Cancel
+                      </Button>
+                      <Button onClick={onSessionSave} className="text-sm">
+                        Save
+                      </Button>
+                    </div>
+                  </div>{" "}
+                </PopoverContent>
+              </Popover>
               <TooltipContent align="end">
                 <p>Add session</p>
               </TooltipContent>
@@ -381,7 +521,7 @@ const App = () => {
           ? Array.from({ length: 10 }).map((_, index) => (
               <LinkLoader key={index + 1} />
             ))
-          : data.map((link) => (
+          : linkDataState.map((link) => (
               <Link key={link.id} name={link.name} url={link.url} />
             ))}
       </div>
@@ -390,3 +530,5 @@ const App = () => {
 };
 
 export default App;
+
+// __Secure-next-auth.session-token
