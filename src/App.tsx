@@ -253,6 +253,9 @@ const App = () => {
     const filteredLinks = links.filter((link) => link.url && link.name);
 
     sessionMutate.mutate({ name: sessionName, links: filteredLinks });
+
+    // Closing the popover
+    setSessionPopoverOpen(false);
   }, [sessionMutate, sessionName]);
 
   return (
@@ -495,7 +498,7 @@ const App = () => {
 
                     <div className="flex justify-end gap-3">
                       <Button
-                        onClick={() => setLinkPopoverOpen(false)}
+                        onClick={() => setSessionPopoverOpen(false)}
                         variant={"outline"}
                         className="hover:bg-accent-foreground/20 hover:text-text text-sm"
                       >
