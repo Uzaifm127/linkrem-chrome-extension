@@ -19,15 +19,19 @@ import { fetcher } from "@/lib/fetcher";
 import LinkLoader from "@/components/link-loader";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { v4 as uuid } from "uuid";
+import Cookies from "js-cookie";
 import { cn } from "@/lib/utils";
 import { normalizeUrl } from "@/lib/functions";
 import { SessionLinkData, Link as LinkType, SessionLink } from "@/types/index";
+import { sessionLinksCookieKey } from "./constants/cookies-keys";
 
 const App = () => {
   const delayDuration = 200;
 
   const [linkPopoverOpen, setLinkPopoverOpen] = useState(false);
   const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false);
+  const [isSessionLinksDuplicated, setIsSessionLinksDuplicated] =
+    useState(false);
   const [linkDataState, setLinkDataState] = useState<Array<LinkType>>([]);
   const [sessionSavingError, setSessionSavingError] = useState("");
   const [sessionName, setSessionName] = useState("");
@@ -46,7 +50,7 @@ const App = () => {
   const linkQuery = useQuery({
     queryKey: [linkQueryKey],
     queryFn: async () =>
-      await fetcher("https://linkrem-three.vercel.app/api/link/all"),
+      await fetcher("https://linkrem-three.vercel.app/api/link/my-links"),
     // enabled: tabValue === "links",
   });
 
@@ -252,7 +256,20 @@ const App = () => {
 
     const filteredLinks = links.filter((link) => link.url && link.name);
 
-    sessionMutate.mutate({ name: sessionName, links: filteredLinks });
+    // Checking if links already existed or not
+    const existingLinks = Cookies.get(sessionLinksCookieKey);
+
+    if (
+      existingLinks &&
+      existingLinks.length > 0 &&
+      JSON.stringify(existingLinks) === JSON.stringify(filteredLinks)
+    ) {
+      setIsSessionLinksDuplicated(true);
+      setSessionSavingError("Session already exists");
+    } else {
+      setIsSessionLinksDuplicated(false);
+      sessionMutate.mutate({ name: sessionName, links: filteredLinks });
+    }
 
     // Closing the popover
     setSessionPopoverOpen(false);
@@ -454,18 +471,33 @@ const App = () => {
                 onOpenChange={setSessionPopoverOpen}
               >
                 <TooltipTrigger asChild>
-                  <PopoverTrigger asChild>
+                  <PopoverTrigger
+                    asChild
+                    onClick={(e) => {
+                      if (isSessionLinksDuplicated) {
+                        e.preventDefault();
+                      }
+                    }}
+                  >
                     <Button
                       size="icon"
                       type="button"
-                      className="bg-white hover:bg-slate-100"
+                      className={cn(
+                        isSessionLinksDuplicated
+                          ? "bg-primary text-white hover:bg-primary/80"
+                          : "bg-white hover:bg-slate-100"
+                      )}
                     >
-                      <Star className="text-text" />
+                      {isSessionLinksDuplicated ? (
+                        <Check className="text-white" />
+                      ) : (
+                        <Star className="text-text" />
+                      )}
                     </Button>
                   </PopoverTrigger>
                 </TooltipTrigger>
                 <TooltipContent align="end">
-                  <p>Add session</p>
+                  <p>{isSessionLinksDuplicated ? "Remove" : "Add"} session</p>
                 </TooltipContent>
 
                 <PopoverContent
@@ -533,5 +565,3 @@ const App = () => {
 };
 
 export default App;
-
-// __Secure-next-auth.session-token
