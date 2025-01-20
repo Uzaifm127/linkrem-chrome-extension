@@ -29,6 +29,7 @@ const App = () => {
   const delayDuration = 200;
 
   const [linkPopoverOpen, setLinkPopoverOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false);
   const [isSessionLinksDuplicated, setIsSessionLinksDuplicated] =
     useState(false);
@@ -51,7 +52,8 @@ const App = () => {
     queryKey: [linkQueryKey],
     queryFn: async () =>
       await fetcher("https://linkrem-three.vercel.app/api/link/my-links"),
-    // enabled: tabValue === "links",
+    enabled: isAuthenticated,
+    retry: false,
   });
 
   // For setting the state of the link data to the previous
@@ -59,6 +61,27 @@ const App = () => {
     () => linkQuery.data?.links || [],
     [linkQuery.data?.links]
   );
+
+  useEffect(() => {
+    const messageListener = (message: {
+      authenticated: boolean;
+      type: "authenticationMessage";
+    }) => {
+      if (message.type === "authenticationMessage") {
+        if (message.authenticated) {
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+        }
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(messageListener);
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(messageListener);
+    };
+  }, []);
 
   useEffect(() => {
     setLinkDataState(linkQuery.data?.links || []);
@@ -261,7 +284,7 @@ const App = () => {
 
     if (
       existingLinks &&
-      existingLinks.length > 0 &&
+      JSON.parse(existingLinks).length > 0 &&
       JSON.stringify(existingLinks) === JSON.stringify(filteredLinks)
     ) {
       setIsSessionLinksDuplicated(true);
@@ -277,289 +300,328 @@ const App = () => {
 
   return (
     <main>
-      <TooltipProvider>
-        <div className="p-4 border-b space-y-2">
-          <div className="flex justify-between">
-            <Tooltip delayDuration={delayDuration}>
-              <Popover open={linkPopoverOpen} onOpenChange={setLinkPopoverOpen}>
-                <TooltipTrigger asChild>
-                  <PopoverTrigger
-                    asChild
-                    onClick={(e) => {
-                      if (URLExistState.boolean) {
-                        e.preventDefault();
-                      }
-                    }}
-                  >
-                    <Button
-                      size="icon"
-                      type="button"
-                      className={cn(
-                        URLExistState.boolean
-                          ? "bg-primary text-white hover:bg-primary/80"
-                          : "bg-white hover:bg-slate-100"
-                      )}
-                      onClick={() => {
-                        if (URLExistState.boolean) {
-                          deleteMutation.mutate(URLExistState.value);
-                        }
-                      }}
-                    >
-                      {URLExistState.boolean ? (
-                        <Check className="text-white" />
-                      ) : (
-                        <Plus className="text-text" />
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent align="start">
-                  <p>{URLExistState.boolean ? "Remove" : "Add"} link</p>
-                </TooltipContent>
-
-                <PopoverContent align="start">
-                  <div className="flex justify-center flex-col gap-4">
-                    <div className="flex items-center gap-2">
-                      <label
-                        htmlFor="page-title"
-                        className="text-sm font-semibold"
-                      >
-                        Title
-                      </label>
-                      <Input
-                        name="title"
-                        id="page-title"
-                        value={singleURL.title}
-                        onChange={onInputChange}
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label
-                        htmlFor="page-url"
-                        className="text-sm font-semibold"
-                      >
-                        URL
-                      </label>
-                      <Input
-                        name="URL"
-                        id="page-url"
-                        value={singleURL.URL}
-                        disabled
-                      />
-                    </div>
-
-                    <div className="flex justify-end gap-3">
-                      <Button
-                        onClick={() => setLinkPopoverOpen(false)}
-                        variant={"outline"}
-                        className="hover:bg-accent-foreground/20 hover:text-text text-sm"
-                      >
-                        Cancel
-                      </Button>
-                      <Button onClick={onLinkSave} className="text-sm">
-                        Save
-                      </Button>
-                    </div>
-                  </div>{" "}
-                </PopoverContent>
-              </Popover>
-            </Tooltip>
-
-            <Tooltip delayDuration={delayDuration}>
-              <Popover>
-                <TooltipTrigger asChild>
-                  <PopoverTrigger asChild>
-                    <Button
-                      size="icon"
-                      type="button"
-                      className="bg-white hover:bg-slate-100"
-                    >
-                      <Command className="text-text" />
-                    </Button>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Shortcuts</p>
-                </TooltipContent>
-
-                <PopoverContent>
-                  <div className="flex justify-center flex-col gap-1">
-                    <div className="bg-primary/5 text-primary p-2 rounded-md">
-                      Press <span>Shift + L</span> to save link
-                    </div>
-                    <div className="bg-primary/5 text-primary p-2 rounded-md">
-                      Press <span>Shift + S</span> to save session
-                    </div>
-                  </div>{" "}
-                </PopoverContent>
-              </Popover>
-            </Tooltip>
-
-            <Tooltip delayDuration={delayDuration}>
-              <Popover>
-                <TooltipTrigger asChild>
-                  <PopoverTrigger asChild>
-                    <Button
-                      size="icon"
-                      type="button"
-                      className="bg-white hover:bg-slate-100"
-                    >
-                      <Search className="text-text" />
-                    </Button>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Search</p>
-                </TooltipContent>
-
-                <PopoverContent>
-                  <Input
-                    type="search"
-                    placeholder="Search by link name or URL"
-                    className="w-full bg-muted"
-                    onChange={(e) => {
-                      const searchedValue = e.target.value;
-
-                      if (searchedValue.length) {
-                        setLinkDataState((prev) => {
-                          return prev.filter(
-                            (link) =>
-                              link.name
-                                .toLowerCase()
-                                .includes(searchedValue.toLowerCase()) ||
-                              link.url
-                                .toLowerCase()
-                                .includes(searchedValue.toLowerCase())
-                          );
-                        });
-                      } else {
-                        // Resetting the data
-                        setLinkDataState(data);
-                      }
-                    }}
-                  />{" "}
-                </PopoverContent>
-              </Popover>
-            </Tooltip>
-
-            <Tooltip delayDuration={delayDuration}>
-              <Popover>
-                <TooltipTrigger asChild>
-                  <PopoverTrigger asChild>
-                    <Button
-                      size="icon"
-                      type="button"
-                      className="bg-white hover:bg-slate-100"
-                    >
-                      <BookmarkPlus className="text-text" />
-                    </Button>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Extract bookmarks</p>
-                </TooltipContent>
-
-                <PopoverContent>
-                  Place content for the popover here.
-                </PopoverContent>
-              </Popover>
-            </Tooltip>
-
-            <Tooltip delayDuration={delayDuration}>
-              <Popover
-                open={sessionPopoverOpen}
-                onOpenChange={setSessionPopoverOpen}
-              >
-                <TooltipTrigger asChild>
-                  <PopoverTrigger
-                    asChild
-                    onClick={(e) => {
-                      if (isSessionLinksDuplicated) {
-                        e.preventDefault();
-                      }
-                    }}
-                  >
-                    <Button
-                      size="icon"
-                      type="button"
-                      className={cn(
-                        isSessionLinksDuplicated
-                          ? "bg-primary text-white hover:bg-primary/80"
-                          : "bg-white hover:bg-slate-100"
-                      )}
-                    >
-                      {isSessionLinksDuplicated ? (
-                        <Check className="text-white" />
-                      ) : (
-                        <Star className="text-text" />
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent align="end">
-                  <p>{isSessionLinksDuplicated ? "Remove" : "Add"} session</p>
-                </TooltipContent>
-
-                <PopoverContent
-                  align="end"
-                  onCloseAutoFocus={() => setLinkDataState(data)}
-                >
-                  <div className="flex justify-center flex-col gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <label
-                          htmlFor="session-name"
-                          className="text-sm font-semibold"
-                        >
-                          Session name
-                        </label>
-                        <Input
-                          name="Session name"
-                          id="session-name"
-                          value={sessionName}
-                          onChange={(e) => {
-                            setSessionSavingError("");
-                            setSessionName(e.target.value);
-                          }}
-                        />
-                      </div>
-                      <p className="text-red-500 text-sm mt-2">
-                        {sessionSavingError}
-                      </p>
-                    </div>
-
-                    <div className="flex justify-end gap-3">
-                      <Button
-                        onClick={() => setSessionPopoverOpen(false)}
-                        variant={"outline"}
-                        className="hover:bg-accent-foreground/20 hover:text-text text-sm"
-                      >
-                        Cancel
-                      </Button>
-                      <Button onClick={onSessionSave} className="text-sm">
-                        Save
-                      </Button>
-                    </div>
-                  </div>{" "}
-                </PopoverContent>
-              </Popover>
-              <TooltipContent align="end">
-                <p>Add session</p>
-              </TooltipContent>
-            </Tooltip>
+      {!isAuthenticated ? (
+        <div className="absolute space-y-4 top-1/2 w-4/5 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <h3 className="text-text-foreground text-2xl text-center font-bold">
+            You are not authorized. Please login first.
+          </h3>
+          <div className="flex justify-center gap-4">
+            <Button
+              variant={"default"}
+              onClick={() =>
+                window.open(
+                  "https://linkrem-three.vercel.app/auth/login",
+                  "_linkrem"
+                )
+              }
+            >
+              Sign in
+            </Button>
+            <Button
+              onClick={() =>
+                window.open(
+                  "https://linkrem-three.vercel.app/auth/signup",
+                  "_linkrem"
+                )
+              }
+              className="bg-slate-100 hover:bg-slate-200 text-text"
+            >
+              Sign up
+            </Button>
           </div>
         </div>
-      </TooltipProvider>
+      ) : (
+        <>
+          <TooltipProvider>
+            <div className="p-4 border-b space-y-2">
+              <div className="flex justify-between">
+                <Tooltip delayDuration={delayDuration}>
+                  <Popover
+                    open={linkPopoverOpen}
+                    onOpenChange={setLinkPopoverOpen}
+                  >
+                    <TooltipTrigger asChild disabled={linkQuery.isLoading}>
+                      <PopoverTrigger
+                        asChild
+                        onClick={(e) => {
+                          if (URLExistState.boolean) {
+                            e.preventDefault();
+                          }
+                        }}
+                      >
+                        <Button
+                          size="icon"
+                          type="button"
+                          className={cn(
+                            URLExistState.boolean
+                              ? "bg-primary text-white hover:bg-primary/80"
+                              : "bg-white hover:bg-slate-100"
+                          )}
+                          onClick={() => {
+                            if (URLExistState.boolean) {
+                              deleteMutation.mutate(URLExistState.value);
+                            }
+                          }}
+                        >
+                          {URLExistState.boolean ? (
+                            <Check className="text-white" />
+                          ) : (
+                            <Plus className="text-text" />
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent align="start">
+                      <p>{URLExistState.boolean ? "Remove" : "Add"} link</p>
+                    </TooltipContent>
 
-      <div className="flex flex-col gap-4 p-4 overflow-y-scroll h-[25.6875rem] [scrollbar-width:none]">
-        {linkQuery.isLoading
-          ? Array.from({ length: 10 }).map((_, index) => (
-              <LinkLoader key={index + 1} />
-            ))
-          : linkDataState.map((link) => (
-              <Link key={link.id} name={link.name} url={link.url} />
-            ))}
-      </div>
+                    <PopoverContent align="start">
+                      <div className="flex justify-center flex-col gap-4">
+                        <div className="flex items-center gap-2">
+                          <label
+                            htmlFor="page-title"
+                            className="text-sm font-semibold"
+                          >
+                            Title
+                          </label>
+                          <Input
+                            name="title"
+                            id="page-title"
+                            value={singleURL.title}
+                            onChange={onInputChange}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label
+                            htmlFor="page-url"
+                            className="text-sm font-semibold"
+                          >
+                            URL
+                          </label>
+                          <Input
+                            name="URL"
+                            id="page-url"
+                            value={singleURL.URL}
+                            disabled
+                          />
+                        </div>
+
+                        <div className="flex justify-end gap-3">
+                          <Button
+                            onClick={() => setLinkPopoverOpen(false)}
+                            variant={"outline"}
+                            className="hover:bg-accent-foreground/20 hover:text-text text-sm"
+                          >
+                            Cancel
+                          </Button>
+                          <Button onClick={onLinkSave} className="text-sm">
+                            Save
+                          </Button>
+                        </div>
+                      </div>{" "}
+                    </PopoverContent>
+                  </Popover>
+                </Tooltip>
+
+                <Tooltip delayDuration={delayDuration}>
+                  <Popover>
+                    <TooltipTrigger asChild>
+                      <PopoverTrigger asChild>
+                        <Button
+                          size="icon"
+                          type="button"
+                          className="bg-white hover:bg-slate-100"
+                        >
+                          <Command className="text-text" />
+                        </Button>
+                      </PopoverTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Shortcuts</p>
+                    </TooltipContent>
+
+                    <PopoverContent>
+                      <div className="flex justify-center flex-col gap-1">
+                        <div className="bg-primary/5 text-primary p-2 rounded-md">
+                          Press <span>Shift + L</span> to save link
+                        </div>
+                        <div className="bg-primary/5 text-primary p-2 rounded-md">
+                          Press <span>Shift + S</span> to save session
+                        </div>
+                      </div>{" "}
+                    </PopoverContent>
+                  </Popover>
+                </Tooltip>
+
+                <Tooltip delayDuration={delayDuration}>
+                  <Popover>
+                    <TooltipTrigger asChild>
+                      <PopoverTrigger asChild>
+                        <Button
+                          size="icon"
+                          type="button"
+                          className="bg-white hover:bg-slate-100"
+                        >
+                          <Search className="text-text" />
+                        </Button>
+                      </PopoverTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Search</p>
+                    </TooltipContent>
+
+                    <PopoverContent>
+                      <Input
+                        type="search"
+                        placeholder="Search by link name or URL"
+                        className="w-full bg-muted"
+                        onChange={(e) => {
+                          const searchedValue = e.target.value;
+
+                          if (searchedValue.length) {
+                            setLinkDataState((prev) => {
+                              return prev.filter(
+                                (link) =>
+                                  link.name
+                                    .toLowerCase()
+                                    .includes(searchedValue.toLowerCase()) ||
+                                  link.url
+                                    .toLowerCase()
+                                    .includes(searchedValue.toLowerCase())
+                              );
+                            });
+                          } else {
+                            // Resetting the data
+                            setLinkDataState(data);
+                          }
+                        }}
+                      />{" "}
+                    </PopoverContent>
+                  </Popover>
+                </Tooltip>
+
+                <Tooltip delayDuration={delayDuration}>
+                  <Popover>
+                    <TooltipTrigger asChild>
+                      <PopoverTrigger asChild>
+                        <Button
+                          size="icon"
+                          type="button"
+                          className="bg-white hover:bg-slate-100"
+                        >
+                          <BookmarkPlus className="text-text" />
+                        </Button>
+                      </PopoverTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Extract bookmarks</p>
+                    </TooltipContent>
+
+                    <PopoverContent>
+                      Place content for the popover here.
+                    </PopoverContent>
+                  </Popover>
+                </Tooltip>
+
+                <Tooltip delayDuration={delayDuration}>
+                  <Popover
+                    open={sessionPopoverOpen}
+                    onOpenChange={setSessionPopoverOpen}
+                  >
+                    <TooltipTrigger asChild>
+                      <PopoverTrigger
+                        asChild
+                        onClick={(e) => {
+                          if (isSessionLinksDuplicated) {
+                            e.preventDefault();
+                          }
+                        }}
+                      >
+                        <Button
+                          size="icon"
+                          type="button"
+                          className={cn(
+                            isSessionLinksDuplicated
+                              ? "bg-primary text-white hover:bg-primary/80"
+                              : "bg-white hover:bg-slate-100"
+                          )}
+                        >
+                          {isSessionLinksDuplicated ? (
+                            <Check className="text-white" />
+                          ) : (
+                            <Star className="text-text" />
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent align="end">
+                      <p>
+                        {isSessionLinksDuplicated ? "Remove" : "Add"} session
+                      </p>
+                    </TooltipContent>
+
+                    <PopoverContent
+                      align="end"
+                      onCloseAutoFocus={() => setLinkDataState(data)}
+                    >
+                      <div className="flex justify-center flex-col gap-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <label
+                              htmlFor="session-name"
+                              className="text-sm font-semibold"
+                            >
+                              Session name
+                            </label>
+                            <Input
+                              name="Session name"
+                              id="session-name"
+                              value={sessionName}
+                              onChange={(e) => {
+                                setSessionSavingError("");
+                                setSessionName(e.target.value);
+                              }}
+                            />
+                          </div>
+                          <p className="text-red-500 text-sm mt-2">
+                            {sessionSavingError}
+                          </p>
+                        </div>
+
+                        <div className="flex justify-end gap-3">
+                          <Button
+                            onClick={() => setSessionPopoverOpen(false)}
+                            variant={"outline"}
+                            className="hover:bg-accent-foreground/20 hover:text-text text-sm"
+                          >
+                            Cancel
+                          </Button>
+                          <Button onClick={onSessionSave} className="text-sm">
+                            Save
+                          </Button>
+                        </div>
+                      </div>{" "}
+                    </PopoverContent>
+                  </Popover>
+                  <TooltipContent align="end">
+                    <p>Add session</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+          </TooltipProvider>
+
+          <div className="flex flex-col gap-4 p-4 overflow-y-scroll h-[25.6875rem] [scrollbar-width:none]">
+            {linkQuery.isLoading
+              ? Array.from({ length: 10 }).map((_, index) => (
+                  <LinkLoader key={index + 1} />
+                ))
+              : linkDataState.map((link) => (
+                  <Link key={link.id} name={link.name} url={link.url} />
+                ))}
+          </div>
+        </>
+      )}
     </main>
   );
 };
