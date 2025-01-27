@@ -77,10 +77,20 @@ const App = () => {
     };
 
     chrome.runtime.onMessage.addListener(messageListener);
+  }, []);
 
-    return () => {
-      chrome.runtime.onMessage.removeListener(messageListener);
-    };
+  useEffect(() => {
+    (async () => {
+      const message = { action: "authenticationStatusCheck" };
+
+      const queryOptions = { currentWindow: true, active: true };
+
+      const [tab] = await chrome.tabs.query(queryOptions);
+
+      if (tab?.id) {
+        chrome.tabs.sendMessage(tab.id, message);
+      }
+    })();
   }, []);
 
   useEffect(() => {

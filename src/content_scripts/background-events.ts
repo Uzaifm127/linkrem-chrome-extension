@@ -1,36 +1,40 @@
-interface ReceivedMessage {
+interface ReceivedTokenMessage {
   action: "onSignIn";
   token?: string;
   authenticated?: boolean;
 }
+
+chrome.runtime.onMessage.addListener((message) => {
+  switch (message.action) {
+    case "authenticationStatusCheck":
+      authenticationCheck();
+      break;
+  }
+});
 
 window.addEventListener("message", async (e) => {
   const message = e.data;
 
   switch (message.action) {
     case "onSignIn":
-      onSignInAuthenticationCheck(message);
+      await handleTokenOnSignIn(message);
       break;
   }
 });
 
-async function onSignInAuthenticationCheck(message: ReceivedMessage) {
+async function authenticationCheck() {
   const { token } = await chrome.storage.local.get(["token"]);
 
-  if (token) {
-    await chrome.runtime.sendMessage({
-      type: "authenticationMessage",
-      authenticated: true,
-    });
-    return;
-  }
+  await chrome.runtime.sendMessage({
+    authenticated: !!token,
+    type: "authenticationMessage",
+  });
+}
 
+async function handleTokenOnSignIn(message: ReceivedTokenMessage) {
   if (message.authenticated) {
     await chrome.storage.local.set({ token: message.token });
+  } else {
+    await chrome.storage.local.remove(["token"]);
   }
-
-  await chrome.runtime.sendMessage({
-    type: "authenticationMessage",
-    authenticated: message.authenticated,
-  });
 }
