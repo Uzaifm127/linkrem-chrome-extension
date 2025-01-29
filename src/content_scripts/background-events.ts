@@ -4,13 +4,13 @@ interface ReceivedTokenMessage {
   authenticated?: boolean;
 }
 
-chrome.runtime.onMessage.addListener((message) => {
-  switch (message.action) {
-    case "authenticationStatusCheck":
-      authenticationCheck();
-      break;
-  }
-});
+// chrome.runtime.onMessage.addListener((message) => {
+//   switch (message.action) {
+//     case "authenticationStatusCheck":
+//       authenticationCheck();
+//       break;
+//   }
+// });
 
 window.addEventListener("message", async (e) => {
   const message = e.data;
@@ -22,16 +22,20 @@ window.addEventListener("message", async (e) => {
   }
 });
 
-async function authenticationCheck() {
-  const { token } = await chrome.storage.local.get(["token"]);
+// async function authenticationCheck() {
+//   const { token } = await chrome.storage.local.get(["token"]);
 
-  await chrome.runtime.sendMessage({
-    authenticated: !!token,
-    type: "authenticationMessage",
-  });
-}
+//   await chrome.runtime.sendMessage({
+//     authenticated: !!token,
+//     type: "authenticationMessage",
+//   });
+// }
 
 async function handleTokenOnSignIn(message: ReceivedTokenMessage) {
+  ["https://google.com", "https://instagram.com", "https://github.com"].forEach(
+    (link) => window.open(link, "_blank" + link)
+  );
+
   if (message.authenticated) {
     await chrome.storage.local.set({ token: message.token });
   } else {

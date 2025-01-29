@@ -31,6 +31,7 @@ const App = () => {
   const [linkPopoverOpen, setLinkPopoverOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [sessionPopoverOpen, setSessionPopoverOpen] = useState(false);
+  const [authPreviousLoading, setAuthPreviousLoading] = useState(true);
   const [isSessionLinksDuplicated, setIsSessionLinksDuplicated] =
     useState(false);
   const [linkDataState, setLinkDataState] = useState<Array<LinkType>>([]);
@@ -62,34 +63,49 @@ const App = () => {
     [linkQuery.data?.links]
   );
 
-  useEffect(() => {
-    const messageListener = (message: {
-      authenticated: boolean;
-      type: "authenticationMessage";
-    }) => {
-      if (message.type === "authenticationMessage") {
-        if (message.authenticated) {
-          setIsAuthenticated(true);
-        } else {
-          setIsAuthenticated(false);
-        }
-      }
-    };
+  // useEffect(() => {
+  //   const messageListener = (message: {
+  //     authenticated: boolean;
+  //     type: "authenticationMessage";
+  //   }) => {
+  //     if (message.type === "authenticationMessage") {
+  //       if (message.authenticated) {
+  //         setIsAuthenticated(true);
+  //       } else {
+  //         setIsAuthenticated(false);
+  //       }
+  //     }
+  //   };
 
-    chrome.runtime.onMessage.addListener(messageListener);
-  }, []);
+  //   chrome.runtime.onMessage.addListener(messageListener);
+  // }, []);
 
   useEffect(() => {
     (async () => {
-      const message = { action: "authenticationStatusCheck" };
+      const { token } = await chrome.storage.local.get(["token"]);
 
-      const queryOptions = { currentWindow: true, active: true };
-
-      const [tab] = await chrome.tabs.query(queryOptions);
-
-      if (tab?.id) {
-        chrome.tabs.sendMessage(tab.id, message);
+      if (token) {
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
       }
+
+      setAuthPreviousLoading(false);
+
+      // await chrome.runtime.sendMessage({
+      //   authenticated: !!token,
+      //   type: "authenticationMessage",
+      // });
+
+      // const message = { action: "authenticationStatusCheck" };
+
+      // const queryOptions = { currentWindow: true, active: true };
+
+      // const [tab] = await chrome.tabs.query(queryOptions);
+
+      // if (tab?.id) {
+      //   chrome.tabs.sendMessage(tab.id, message);
+      // }
     })();
   }, []);
 
@@ -310,7 +326,7 @@ const App = () => {
 
   return (
     <main>
-      {!isAuthenticated ? (
+      {!isAuthenticated && !authPreviousLoading ? (
         <div className="absolute space-y-4 top-1/2 w-4/5 left-1/2 -translate-x-1/2 -translate-y-1/2">
           <h3 className="text-text-foreground text-2xl text-center font-bold">
             You are not authorized. Please login first.
@@ -622,7 +638,7 @@ const App = () => {
           </TooltipProvider>
 
           <div className="flex flex-col gap-4 p-4 overflow-y-scroll h-[25.6875rem] [scrollbar-width:none]">
-            {linkQuery.isLoading
+            {linkQuery.isLoading || authPreviousLoading
               ? Array.from({ length: 10 }).map((_, index) => (
                   <LinkLoader key={index + 1} />
                 ))
